@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة الطائر الطائر</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #33CCCC;
+        }
+        canvas {
+            border: 2px solid #000;
+            background-color: #A9E2F3;
+        }
+        .message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            color: black;
+            text-align: center;
+            z-index: 10;
+        }
+        .footer {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: gray;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div class="message" id="startMessage">هل أنت مستعد؟</div>
+    <div class="footer">طور بواسطة ساجد</div>
+    <script>
+        const game = {
+            canvas: document.getElementById('gameCanvas'),
+            ctx: null,
+            width: 320,
+            height: 480,
+            isGameOver: false,
+            isGameStarted: false,
+            score: 0,
+            highScore: localStorage.getItem('highScore') || 0,
+            backgrounds: [
+                { color: '#A9E2F3', buildings: false, forest: false }, // الخلفية الأولى
+                { color: '#81BEF7', buildings: true, forest: false }, // الخلفية الثانية
+                { color: '#58ACFA', buildings: false, forest: true }, // الخلفية الثالثة
+                { color: '#2E9AFE', buildings: true, forest: true }, // الخلفية الرابعة
+            ],
+            currentBackground: 0,
+        };
+
+        const bird = {
+            x: 50,
+            y: game.height / 2,
+            speed: 0,
+            gravity: 0.2,
+            lift: -6,
+            width: 30,
+            height: 20,
+        };
+
+        const pipes = {
+            list: [],
+            width: 50,
+            gap: 140,
+            speed: 2,
+            minGap: 120,
+            maxGap: 200,
+            pipeDistance: 160,
+        };
+
+        function init() {
+            game.canvas.width = game.width;
+            game.canvas.height = game.height;
+            game.ctx = game.canvas.getContext('2d');
+        }
+
+        function drawBackground() {
+            const currentBg = game.backgrounds[game.currentBackground];
+            game.ctx.fillStyle = currentBg.color;
+            game.ctx.fillRect(0, 0, game.width, game.height);
+
+            if (currentBg.buildings) {
+                // رسم مباني
+                game.ctx.fillStyle = 'gray';
+                game.ctx.fillRect(20, game.height - 50, 40, 30);
+                game.ctx.fillRect(80, game.height - 80, 50, 60);
+                game.ctx.fillRect(150, game.height - 60, 45, 40);
+            }
+
+            if (currentBg.forest) {
+                // رسم غابة
+                game.ctx.fillStyle = 'green';
+                game.ctx.beginPath();
+                game.ctx.moveTo(250, game.height - 20);
+                game.ctx.lineTo(270, game.height - 60);
+                game.ctx.lineTo(290, game.height - 20);
+                game.ctx.fill();
+            }
+        }
+
+        function drawBird() {
+            game.ctx.fillStyle = 'orange';
+            game.ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+            game.ctx.fillStyle = 'white';
+            game.ctx.fillRect(bird.x + bird.width - 10, bird.y + 5, 5, 5);
+        }
+
+        function drawPipes() {
+            pipes.list.forEach(pipe => {
+                game.ctx.fillStyle = 'brown';
+                game.ctx.fillRect(pipe.x, 0, pipes.width, pipe.y);
+                game.ctx.fillRect(pipe.x, pipe.y + pipe.gap, pipes.width, game.height - pipe.y - pipe.gap);
+            });
+        }
+
+        function drawScore() {
+            game.ctx.font = '20px Arial';
+            game.ctx.fillStyle = 'black';
+            game.ctx.fillText(`النتيجة: ${game.score} | أعلى نتيجة: ${game.highScore}`, 10, 30);
+        }
+
+        function createPipe() {
+            const gap = Math.floor(Math.random() * (pipes.maxGap - pipes.minGap)) + pipes.minGap;
+            const gapY = Math.floor(Math.random() * (game.height - gap - 30)) + 15;
+            const newPipeX = pipes.list.length > 0 ? pipes.list[pipes.list.length - 1].x + pipes.pipeDistance : game.width;
+            pipes.list.push({ x: newPipeX, y: gapY, gap: gap, passed: false });
+        }
+
+        function movePipes() {
+            pipes.list.forEach((pipe, index) => {
+                pipe.x -= pipes.speed;
+                if (pipe.x + pipes.width < bird.x && !pipe.passed) {
+                    pipe.passed = true;
+                    game.score++;
+                    pipes.speed += 0.15;
+                    pipes.gap -= 3;
+                    if (game.score % 5 === 0) { // تغيير الخلفية كل 5 أعمدة
+                        game.currentBackground = (game.currentBackground + 1) % game.backgrounds.length;
+                    }
+                }
+                if (pipe.x + pipes.width < 0) {
+                    pipes.list.splice(index, 1);
+                }
+            });
+        }
+
+        function moveBird() {
+            bird.speed += bird.gravity;
+            bird.y += bird.speed;
+            if (bird.y + bird.height > game.height || bird.y < 0) {
+                gameOver();
+            }
+        }
+
+        function checkCollision() {
+            for (let pipe of pipes.list) {
+                if (bird.x + bird.width > pipe.x && bird.x < pipe.x + pipes.width) {
+                    if (bird.y < pipe.y || bird.y + bird.height > pipe.y + pipe.gap) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+
+        function gameOver() {
+            game.isGameOver = true;
+            game.ctx.font = '30px Arial';
+            game.ctx.fillStyle = 'red';
+            game.ctx.fillText('انتهت اللعبة!', game.width / 2 - 80, game.height / 2);
+            game.ctx.fillText('انقر لإعادة التشغيل', game.width / 2 - 140, game.height / 2 + 40);
+            if (game.score > game.highScore) {
+                game.highScore = game.score;
+                localStorage.setItem('highScore', game.highScore);
+            }
+        }
+
+        function restartGame() {
+            bird.y = game.height / 2;
+            bird.speed = 0;
+            pipes.list = [];
+            game.score = 0;
+            game.isGameOver = false;
+            game.isGameStarted = false;
+            pipes.speed = 2;
+            pipes.gap = 140;
+            game.currentBackground = 0; // إعادة تعيين الخلفية
+            document.getElementById('startMessage').style.display = 'block';
+            game.ctx.clearRect(0, 0, game.width, game.height);
+        }
+
+        function loop() {
+            game.ctx.clearRect(0, 0, game.width, game.height);
+            if (!game.isGameOver) {
+                drawBackground();
+                moveBird();
+                movePipes();
+                drawPipes();
+                drawBird();
+                drawScore();
+                checkCollision();
+                if (Math.random() < 0.02) {
+                    createPipe();
+                }
+                requestAnimationFrame(loop);
+            }
+        }
+
+        document.addEventListener('click', () => {
+            if (!game.isGameStarted) {
+                game.isGameStarted = true;
+                document.getElementById('startMessage').style.display = 'none';
+                loop();
+            } else if (!game.isGameOver) {
+                bird.speed = bird.lift;
+            } else {
+                restartGame();
+            }
+        });
+
+        init();
+    </script>
+</body>
+</html>
